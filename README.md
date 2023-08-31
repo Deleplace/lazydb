@@ -42,9 +42,26 @@ Uses a [RWMutex](https://pkg.go.dev/sync#RWMutex) to guard the map:
 - any number of requests are allowed to read the map concurrently
 - only one request is allowed to write to the map at given time, when no request is reading it.
 
+```
+	s.dbmapLock.RLock()
+	db := s.dbmap[tenantID]
+	s.dbmapLock.RUnlock()
+
+	if db == nil {
+		s.dbmapLock.Lock()
+		db = Connect(tenantID)
+		s.dbmap[tenantID] = db
+		s.dbmapLock.Unlock()
+	}
+```
+
 The benchmark handles the 300 requests in 8082ms (8 seconds).
 
 ```
 % go test -bench=.
 BenchmarkServer-10    	       1	8082930459 ns/op
 ```
+
+Note that the lock is being held during the creation of the DB connection. This effectively serializes the creation of the connections, which are never created concurrently.
+
+The code has a [TOCTOU](https://en.wikipedia.org/wiki/Time-of-check_to_time-of-use) problem: between the instant when you read the map and the instant when you create the connection, the connection may have been already created by another request. Many connections are created redundantly for the same tenant.
