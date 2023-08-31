@@ -65,3 +65,33 @@ BenchmarkServer-10    	       1	8082930459 ns/op
 Note that the lock is being held during the creation of the DB connection. This effectively serializes the creation of the connections, which are never created concurrently.
 
 The code has a [TOCTOU](https://en.wikipedia.org/wiki/Time-of-check_to_time-of-use) problem: between the instant when you read the map and the instant when you create the connection, the connection may have been already created by another request. Many connections are created redundantly for the same tenant.
+
+## 3. Double check
+
+Performs a [double-checked locking](https://en.wikipedia.org/wiki/Double-checked_locking) before writing to the map, effectively preventing the unwanted creation of redundant connections.
+
+```
+	s.dbmapLock.RLock()
+	db := s.dbmap[tenantID]
+	s.dbmapLock.RUnlock()
+
+	if db == nil {
+		s.dbmapLock.Lock()
+		db = s.dbmap[tenantID]
+		if db == nil {
+			db = Connect(tenantID)
+			s.dbmap[tenantID] = db
+		}
+		s.dbmapLock.Unlock()
+	}
+```
+
+The benchmark handles the 300 requests in 547ms.
+
+```
+% go test -v -bench=.
+BenchmarkServer-10    	       2	 547159146 ns/op
+```
+
+Note that the connections for distinct tenants are still created sequentially, not concurrently.
+
