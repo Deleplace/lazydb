@@ -28,7 +28,7 @@ The benchmark handles the 300 requests in 283ms.
 BenchmarkServer-10    	       4	 283416740 ns/op
 ```
 
-However, the code is not properly synchronized, causing random data races!
+However, the code is not properly synchronized, causing random data race crashes!
 
 ```
 fatal error: concurrent map writes
@@ -55,7 +55,9 @@ Uses a [RWMutex](https://pkg.go.dev/sync#RWMutex) to guard the map:
 	}
 ```
 
-The benchmark handles the 300 requests in 8082ms (8 seconds).
+The benchmark handles the 300 requests in 8082ms (8 seconds). 
+
+It successfully passes the race detector.
 
 ```
 % go test -bench=.
@@ -95,3 +97,33 @@ BenchmarkServer-10    	       2	 547159146 ns/op
 
 Note that the connections for distinct tenants are still created sequentially, not concurrently.
 
+## 4. Channels
+
+In implementations 2 and 3, no request is allowed to make any progress while one request is holding the write lock for the whole duration of its connection creation. This is suboptimal, and problematic when you have a lot of tenants and a lot of incoming traffic.
+
+We achieve more fluid concurrent requests with the following strategy:
+- no lock is held by a request, during the creation of a connection,
+- the lock must always be held for a very short time,
+- a connection for a given tenant is either found, or absent, or "pending"
+- when a request need a connection that is "pending", it must wait until the connection is created, without initiating a new creation.
+
+The synchronization device for waiting on a "pending" connection may be a Mutex, or a Semaphore, or a channel.
+
+```
+	dbmap     map[string]*DB
+	dbPending map[string]<-chan bool
+	dbLock    sync.RWMutex
+```
+
+Our implementation creates a channel for each "pending" connection, and closes the channel when the connection becomes available, effectively broadcasting the message "your connection is ready" to several blocked requests.
+
+See the code for `(*Server).getDB` in `04_best/server.go`.
+
+The benchmark handles the 300 requests in 212ms.
+
+```
+% go test -v -bench=.
+BenchmarkServer-10    	       8	 212337531 ns/op
+```
+
+In this artificial experiment, everything is local. The only operation that takes a lot of time is the simulation (with [time.Sleep](https://pkg.go.dev/time#Sleep)) of the creation of a database connection. Thus, it makes sense that the total duration of the benchmark is dominated by the time it takes to create 4 connections concurrently. This is the duration of "the slowest out of 4", which is smaller than the sum of 4 sequential creations.
