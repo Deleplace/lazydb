@@ -13,6 +13,14 @@ The database is fake: it just simulates a connection that takes between 50ms and
 
 Uses a map of connections.
 
+```
+	db := s.dbmap[tenantID]
+	if db == nil {
+		db = Connect(tenantID)
+		s.dbmap[tenantID] = db
+	}
+```
+
 The benchmark handles the 300 requests in 283ms.
 
 ```
