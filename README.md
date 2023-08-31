@@ -35,3 +35,16 @@ fatal error: concurrent map writes
 ```
 
 The race conditions are often detected in normal mode, and always detected when enabling the race detector using the `-race` flag.
+
+## 2. Lock
+
+Uses a [RWMutex](https://pkg.go.dev/sync#RWMutex) to guard the map:
+- any number of requests are allowed to read the map concurrently
+- only one request is allowed to write to the map at given time, when no request is reading it.
+
+The benchmark handles the 300 requests in 8082ms (8 seconds).
+
+```
+% go test -bench=.
+BenchmarkServer-10    	       1	8082930459 ns/op
+```
