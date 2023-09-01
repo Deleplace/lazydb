@@ -91,7 +91,7 @@ Performs a [double-checked locking](https://en.wikipedia.org/wiki/Double-checked
 The benchmark handles the 300 requests in 547ms.
 
 ```
-% go test -v -bench=.
+% go test -bench=.
 BenchmarkServer-10    	       2	 547159146 ns/op
 ```
 
@@ -122,7 +122,7 @@ See the code for `(*Server).getDB` in `04_best/server.go`.
 The benchmark handles the 300 requests in 212ms.
 
 ```
-% go test -v -bench=.
+% go test -bench=.
 BenchmarkServer-10    	       8	 212337531 ns/op
 ```
 
