@@ -2,7 +2,7 @@
 
 Sample Go code of a server connecting to a database on-demand, depending on the incoming request.
 
-The first time a request needs to access the database of a tenant T, the server initiation the new DB connection. After that,
+The first time a request needs to access the database of a tenant T, the server initiates the new DB connection. After that,
 subsequent requests for the same tenant T should reuse the connection, rather than creating a new one.
 
 Here are benchmarks for 300 incoming requests, 4 distinct tenants, and maximum 60 requests hitting the server at the same time.
@@ -40,7 +40,7 @@ The race conditions are often detected in normal mode, and always detected when 
 
 Uses a [RWMutex](https://pkg.go.dev/sync#RWMutex) to guard the map:
 - any number of requests are allowed to read the map concurrently
-- only one request is allowed to write to the map at given time, when no request is reading it.
+- only one request is allowed to write to the map at any given time, when no request is reading it.
 
 ```
 	s.dbmapLock.RLock()
@@ -57,12 +57,12 @@ Uses a [RWMutex](https://pkg.go.dev/sync#RWMutex) to guard the map:
 
 The benchmark handles the 300 requests in 8082ms (8 seconds). 
 
-It successfully passes the race detector.
-
 ```
 % go test -bench=.
 BenchmarkServer-10    	       1	8082930459 ns/op
 ```
+
+It successfully passes the race detector.
 
 Note that the lock is being held during the creation of the DB connection. This effectively serializes the creation of the connections, which are never created concurrently.
 
@@ -105,7 +105,7 @@ We achieve more fluid concurrent requests with the following strategy:
 - no lock is held by a request, during the creation of a connection,
 - the lock must always be held for a very short time,
 - a connection for a given tenant is either found, or absent, or "pending"
-- when a request need a connection that is "pending", it must wait until the connection is created, without initiating a new creation.
+- when a request needs a connection that is "pending", it must wait until the connection is created, without initiating a new creation.
 
 The synchronization device for waiting on a "pending" connection may be a Mutex, or a Semaphore, or a channel.
 
